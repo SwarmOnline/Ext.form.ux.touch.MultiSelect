@@ -11,31 +11,39 @@
     Date         : 01/09/2011
 */
 
-Ext.ns("Ext.form.ux.touch");
 
-Ext.form.ux.touch.MultiSelect = Ext.extend(Ext.form.Select, {
-    columns: 2,
-    selectedItemCls: "x-multiselect-item-selected",
-    itemWidth: 200,
-    itemType: "list",
-    multiSelect: true,
-    delimiter: ",",
+Ext.define('Ext.form.ux.touch.MultiSelect', {
+
+	extend: 'Ext.form.Select',
+
+	alias: 'widget.multiselectfield',
+
+	config: {
+	    columns: 2,
+	    selectedItemCls: "x-multiselect-item-selected",
+	    itemWidth: 200,
+	    itemType: "list",
+	    multiSelect: true,
+	    delimiter: ",",
+
+		displayField: '',
+		valueField: ''
+	},
 
     getDataView: function() {
         var config = this.itemConfig || {};
         
         Ext.applyIf(config, {
             xtype: "dataview",
-            store: this.store,
+            store: this.getStore(),
             itemId: "list",
             scroll: false,
-            multiSelect: this.multiSelect,
-            simpleSelect: this.multiSelect,
-            itemSelector: "div.x-multiselect-item",
-            tpl: new Ext.XTemplate(
-                '<div class="x-multiselect-wrap" style="-webkit-column-count: ' + this.columns + ';">',
+	        mode: this.getMultiSelect() ? 'SIMPLE' : 'SINGLE',
+	        itemSelector: "div.x-multiselect-item",
+            itemTpl: Ext.create('Ext.XTemplate',
+                '<div class="x-multiselect-wrap" style="-webkit-column-count: ' + this.getColumns() + ';">',
                     '<tpl for=".">',
-                        '<div class="x-multiselect-item">{' + this.displayField + '}</div>',
+                        '<div class="x-multiselect-item">{' + this.getDisplayField() + '}</div>',
                     '</tpl>',
                 '</div>'
             )
@@ -46,18 +54,17 @@ Ext.form.ux.touch.MultiSelect = Ext.extend(Ext.form.Select, {
 
     getList: function() {
         var config = this.itemConfig || {};
-        
+
         Ext.applyIf(config, {
             xtype: "list",
-            store: this.store,
+            store: this.getStore(),
             itemId: "list",
             scroll: false,
-            multiSelect: this.multiSelect,
-            simpleSelect: this.multiSelect,
+	        mode: this.getMultiSelect() ? 'SIMPLE' : 'SINGLE',
             itemTpl : [
-                '<span class="x-list-label">{' + this.displayField + '}</span>',
+                '<span class="x-list-label">{' + this.getDisplayField() + '}</span>',
                 '<span class="x-list-selected"></span>'
-            ]
+            ].join('')
         });
         
         return config;
@@ -68,7 +75,7 @@ Ext.form.ux.touch.MultiSelect = Ext.extend(Ext.form.Select, {
             item;
 
         if (!me.itemPanel) {
-            switch (me.itemType) {
+            switch (me.getItemType()) {
                 case "dataview" :
                     item = me.getDataView();
                     break;
@@ -86,13 +93,16 @@ Ext.form.ux.touch.MultiSelect = Ext.extend(Ext.form.Select, {
                 selectionchange : me.onListSelectionChange
             };
 
-            me.itemPanel = new Ext.Panel({
-                floating         : true,
+            me.itemPanel = Ext.create('Ext.Panel', {
+                modal            : true,
+	            top: 0,
+	            left: 0,
                 stopMaskTapEvent : false,
                 hideOnMaskTap    : true,
                 cls              : "x-select-overlay",
-                scroll           : "vertical",
+                scrollable       : "vertical",
                 items            : item,
+	            layout: 'fit',
                 listeners        : {
                     scope : me,
                     hide  : me.destroyItemPanel
@@ -108,11 +118,11 @@ Ext.form.ux.touch.MultiSelect = Ext.extend(Ext.form.Select, {
         delete this.itemPanel;
     },
     
-    showComponent: function() {
+    showPicker: function() {
         var me       = this,
-            itemType = me.itemType,
-            value    = me.value,
-            store    = me.store,
+            itemType = me.getItemType(),
+            value    = me.getValue(),
+            store    = me.getStore(),
             v        = 0,
             recs     = [],
             itemPanel, values, vNum, idx, rec;
@@ -122,10 +132,12 @@ Ext.form.ux.touch.MultiSelect = Ext.extend(Ext.form.Select, {
         } else {
             itemPanel = me.getItemPanel();
 
-            itemPanel.showBy(me.el, "fade", false);
+	        Ext.Viewport.add(itemPanel);
+
+            itemPanel.showBy(me.element);
             
-            if (value != "") {
-                values = value.toString().split(",");
+            if (!Ext.isEmpty(value)) {
+                values = value.toString().split(this.getDelimiter());
                 vNum   = values.length;
 
                 for (; v < vNum; v++) {
@@ -137,17 +149,20 @@ Ext.form.ux.touch.MultiSelect = Ext.extend(Ext.form.Select, {
                     }
                 }
 
-                itemPanel.down('#list').getSelectionModel().select(recs, false, true)
+	            if(recs.length){
+                    itemPanel.down('#list').select(recs, false, true)
+	            }
             }
         }
         me.isActive = true;
     },
 
     onListSelectionChange: function(sm, recs) {
+
         var me         = this,
-            valueField = me.valueField,
-            delimiter  = me.delimiter,
-            store      = me.store,
+            valueField = me.getValueField(),
+            delimiter  = me.getDelimiter(),
+            store      = me.getStore(),
             rNum       = recs.length,
             r          = 0,
             values     = [],
@@ -164,56 +179,98 @@ Ext.form.ux.touch.MultiSelect = Ext.extend(Ext.form.Select, {
         } else {
             me.setValue("");
         }
-        if (!me.multiSelect) {
+        if (!me.getMultiSelect()) {
             itemPanel = me.getItemPanel();
             itemPanel.hide();
         }
     },
 
-    setValue: function(value) {
-        var me           = this,
-            store        = me.store,
-            hiddenField  = me.hiddenField,
-            displayField = me.displayField,
-            delimiter    = me.delimiter,
-            idx          = 0,
-            v            = 0,
-            text         = [],
-            rec, values, vNum;
-        
-        if (value.length > 0 || typeof value === "number") {
-            if (typeof value === "string") {
-                values = value.split(delimiter);
-            } else {
-                values = [value];
-            }
+	applyValue: function(value) {
+		var record = value,
+			index, store;
 
-            vNum = values.length;
+		//we call this so that the options configruation gets intiailized, so that a store exists, and we can
+		//find the correct value
+		this.getOptions();
 
-            for (; v < vNum; v++) {
-                idx = this.findIndex(values[v]);
+/*		store = this.getStore();
 
-                if (idx >= 0) {
-                    rec = store.getAt(idx);
+		if ((value && !value.isModel) && store) {
+			index = store.find(this.getValueField(), value, null, null, null, true);
 
-                    text.push(rec.get(displayField));
-                }
-            }
-        }
-        me.value             = value;
-        me.fieldEl.dom.value = text.join(delimiter);
+			if (index == -1) {
+				index = store.find(this.getDisplayField(), value, null, null, null, true);
+			}
 
-        if (hiddenField) {
-            hiddenField.dom.value = me.value;
-        }
+			record = store.getAt(index);
+		}*/
 
-        me.fireEvent("change", me, value);
+		return record;
+	},
+
+    updateValue: function(value) {
+/*	    this.previousRecord = oldValue;
+	    this.record = newValue;
+
+	    this.callParent([(newValue && newValue.isModel) ? newValue.get(this.getDisplayField()) : '']);
+	   */
+	    if(value){
+	        var me           = this,
+	            store        = me.getStore(),
+	            hiddenField  = me.hiddenField,
+	            displayField = me.getDisplayField(),
+	            delimiter    = me.getDelimiter(),
+	            idx          = 0,
+	            v            = 0,
+	            text         = [],
+	            rec, values, vNum;
+
+	        if (value.length > 0 || typeof value === "number") {
+	            if (typeof value === "string") {
+	                values = value.split(delimiter);
+	            } else {
+	                values = [value];
+	            }
+
+	            vNum = values.length;
+
+	            for (; v < vNum; v++) {
+	                idx = this.findIndex(values[v]);
+
+	                if (idx >= 0) {
+	                    rec = store.getAt(idx);
+
+	                    text.push(rec.get(displayField));
+	                }
+	            }
+	        }
+	        //me._value             = value;
+
+	        //me.getComponent().element.dom.value = text.join(delimiter);
+
+	        if (hiddenField) {
+	            hiddenField.dom.value = me.value;
+	        }
+
+
+		    Ext.field.Select.superclass.updateValue.call(this, [text.join(delimiter)]);
+
+		    me.fireEvent("change", me, value);
+	    } else {
+		    Ext.field.Select.superclass.updateValue.call(this, [value]);
+	    }
+
+	    return value;
     },
+
+	getValue: function(){
+		return this._value;
+	},
 
     findIndex: function(value) {
         var me         = this,
-            valueField = me.valueField,
-            store      = me.store,
+            valueField = me.getValueField(),
+            store      = me.getStore(),
             idx        = store.findBy(function(rec) {
                 if (rec.get(valueField) === value) {
                     return true;
@@ -228,5 +285,3 @@ Ext.form.ux.touch.MultiSelect = Ext.extend(Ext.form.Select, {
         Ext.destroy(this.itemPanel);
     }
 });
-
-Ext.reg("multiselectfield", Ext.form.ux.touch.MultiSelect);
